@@ -18,8 +18,9 @@ This project supports:
 ## Requirements
 
 ### Software
-- Install [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.0 or later (tested with v3.0)
-- Toolchain in the SDK is GNU Arm® embedded compiler v10.3.1
+- Install [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.1 or later (tested with v3.1)
+- Toolchain in the SDK is GNU Arm® embedded compiler v11.3.1
+- Note: If using MTB v3.0 or lower, the inclusion of time.h in sensor_aq.h must be moved back inside the IFDEF immediately below it
 
 ### Hardware
 
@@ -55,6 +56,28 @@ Create the project and open it using one of the following:
 5. The **Application(s) Root Path** defaults to the Eclipse workspace which is usually the desired location for the application. If you want to store the application in a different location, you can change the *Application(s) Root Path* value. Applications that share libraries should be in the same root path.
 
 6. Click **Create** to complete the application creation process.
+
+7. Open the **Modus Toolbox Library Manager** and browse to the project directory that you just created and ensure the following libraries are installed:
+     - abstraction-rtos
+     - cat1cm0p
+     - clib-support
+     - cmsis
+     - core-lib
+     - core-make
+     - emwin
+     - freertos
+     - mtb-hal-cat1
+     - mtb-pdl-cat1
+     - recipe-make-cat1a
+     - retarget-io
+     - serial-flash
+
+8. If using the BLE Pioneer kit also install the following libraries:
+     - bmi260
+     - btstack
+     - btstack-integration
+     - display-eink-e2271cs021
+     - sensor-motion-bmi260
 
 For more details, see the [Eclipse IDE for ModusToolbox&trade; software user guide](https://www.infineon.com/MTBEclipseIDEUserGuide) (locally available at *{ModusToolbox&trade; software install directory}/docs_{version}/mt_ide_user_guide.pdf*).
 

@@ -23,6 +23,8 @@
 #include "firmware-sdk/ei_fusion.h"
 #include "ei_device_psoc62.h"
 #include "ei_run_impulse.h"
+#include "cycfg_gatt_db.h"
+#include "ei_bluetooth_psoc63.h"
 
 
 typedef enum {
@@ -40,6 +42,7 @@ static bool continuous_mode = false;
 static bool debug_mode = false;
 static float samples_circ_buff[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE];
 static int samples_wr_index = 0;
+const char truncate[] = ".."; /* used to truncate long labels */
 
 /**
  * @brief Called for each single sample
@@ -47,7 +50,7 @@ static int samples_wr_index = 0;
  */
 bool samples_callback(const void *raw_sample, uint32_t raw_sample_size)
 {
-    if(state != INFERENCE_SAMPLING) {
+    if (state != INFERENCE_SAMPLING) {
         // stop collecting samples if we are not in SAMPLING state
         return true;
     }
@@ -56,11 +59,11 @@ bool samples_callback(const void *raw_sample, uint32_t raw_sample_size)
 
     for(int i = 0; i < (int)(raw_sample_size / sizeof(float)); i++) {
         samples_circ_buff[samples_wr_index++] = sample[i];
-        if(samples_wr_index > EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE) {
+        if (samples_wr_index > EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE) {
             /* start from beginning of the circular buffer */
             samples_wr_index = 0;
         }
-        if(samples_wr_index >= samples_per_inference) {
+        if (samples_wr_index >= samples_per_inference) {
             state = INFERENCE_DATA_READY;
             return true;
         }
@@ -71,6 +74,37 @@ bool samples_callback(const void *raw_sample, uint32_t raw_sample_size)
 
 static void display_results(ei_impulse_result_t* result)
 {
+    static int ble_inference_settings_ready = 0;
+    float max = 0.0f;
+    size_t max_ix = 0;
+    size_t volatile label_len = 0;
+
+    /* Update BLE settings payload once */
+    if (!ble_inference_settings_ready) {
+        size_t next_total_len, total_len = 0;
+        memset(app_edge_impulse_settings, 0, app_edge_impulse_class_result_len);
+
+        for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+            unsigned int copylen = strlen(result->classification[ix].label);
+
+            next_total_len = total_len + copylen + 1; /* +1 accounts for the '/' separator */
+            if (next_total_len > app_edge_impulse_class_result_len) {
+                if (app_edge_impulse_class_result_len - total_len > 1) {
+                    /* Truncate with ".." the BLE payload showing all available chars */
+                    strncat((char*)&app_edge_impulse_settings[total_len], truncate, sizeof(truncate));
+                }
+                break; /* avoid buffer overflow */
+            }
+
+            strncat((char*)&app_edge_impulse_settings[total_len], result->classification[ix].label, copylen);
+            total_len += copylen;
+
+            app_edge_impulse_settings[total_len] = '/';
+            total_len++;
+        }
+        ble_inference_settings_ready++;
+    }
+
     ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
         result->timing.dsp, result->timing.classification, result->timing.anomaly);
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
@@ -79,6 +113,24 @@ static void display_results(ei_impulse_result_t* result)
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
     ei_printf("    anomaly score: %f\r\n", result->anomaly);
 #endif
+
+    /* Find the label with maximum confidence */
+    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+        if (result->classification[ix].value > max) {
+            max = result->classification[ix].value;
+            max_ix = ix;
+        }
+    }
+    /* Update BLE payload */
+    label_len = strlen(result->classification[max_ix].label);
+    //printf("strlen = %u, app_edge_impulse_class_result_len = %d\n", label_len, app_edge_impulse_class_result_len);
+    if (label_len > app_edge_impulse_class_result_len) {
+        label_len = app_edge_impulse_class_result_len;
+    }
+    //printf("label_len = %u\n", label_len);
+    memset(app_edge_impulse_class_result, 0x00, app_edge_impulse_class_result_len);
+    memcpy(app_edge_impulse_class_result, result->classification[max_ix].label, label_len);
+    bt_app_send_notification(CLASS_RESULT);
 }
 
 void ei_run_impulse(void)
@@ -89,7 +141,7 @@ void ei_run_impulse(void)
             // nothing to do
             return;
         case INFERENCE_WAITING:
-            if(ei_read_timer_ms() < (last_inference_ts + 2000)) {
+            if (ei_read_timer_ms() < (last_inference_ts + 2000)) {
                 return;
             }
             state = INFERENCE_SAMPLING;
@@ -124,7 +176,7 @@ void ei_run_impulse(void)
     // run the impulse: DSP, neural network and the Anomaly algorithm
     ei_impulse_result_t result = { 0 };
     EI_IMPULSE_ERROR ei_error;
-    if(continuous_mode == true) {
+    if (continuous_mode == true) {
         ei_error = run_classifier_continuous(&signal, &result, debug_mode);
     }
     else {
@@ -136,8 +188,8 @@ void ei_run_impulse(void)
         return;
     }
 
-    if(continuous_mode == true) {
-        if(++print_results >= (EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW >> 1)) {
+    if (continuous_mode == true) {
+        if (++print_results >= (EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW >> 1)) {
             display_results(&result);
             print_results = 0;
         }
@@ -146,7 +198,7 @@ void ei_run_impulse(void)
         display_results(&result);
     }
 
-    if(continuous_mode == true) {
+    if (continuous_mode == true) {
         state = INFERENCE_SAMPLING;
     }
     else {
@@ -204,7 +256,7 @@ void ei_stop_impulse(void)
 {
     EiDeviceInfo *dev = EiDeviceInfo::get_device();
 
-    if(state != INFERENCE_STOPPED) {
+    if (state != INFERENCE_STOPPED) {
         state = INFERENCE_STOPPED;
         ei_printf("Inferencing stopped by user\r\n");
         dev->set_state(eiStateFinished);
