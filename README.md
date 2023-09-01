@@ -1,6 +1,6 @@
 # EdgeImpulse example of Keyword Spotting using Infineon PSoC 6
 
-Edge Impulse enables developers to create the next generation of intelligent device solutions with embedded machine learning. This repository contains the Edge Impulse firmware for Infineon PSoC 62 BLE Pioneer Kit with the Eink EPD Expansion Kit. This device supports all of Edge Impulse's device features, including ingestion, remote management and inferencing.
+Edge Impulse enables developers to create the next generation of intelligent device solutions with embedded machine learning. This repository contains the Edge Impulse firmware for Infineon PSoC 6 BLE Pioneer Kit with the Eink EPD Expansion Kit. This device supports all of Edge Impulse's device features, including ingestion, remote management and inferencing.
 
 This examples come with a ML trained model that provides detecton of the words `on` and `off`. The preloaded Machine Learning model can be easily replaced with a different trained model from the [EdgeImpulse](https://edgeimpulse.com) Online Studio.
 
@@ -20,7 +20,7 @@ This project supports:
 ### Software
 - Install [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.1 or later (tested with v3.1)
 - Toolchain in the SDK is GNU Arm® embedded compiler v11.3.1
-- Note: If using MTB v3.0 or lower, the inclusion of time.h in sensor_aq.h must be moved back inside the IFDEF immediately below it
+- Note: If using MTB v3.0 or lower, the inclusion of time.h in sensor_aq.h must be moved back inside the IFDEF immediately below it, or the build will fail "error: 'time_t' has not been declared"
 
 ### Hardware
 
@@ -31,7 +31,7 @@ This project supports:
 
 ## Quick start
 
-EdgeImpulse offers a [getting started ML guide for the PSoC 62S2 Pioneer Kit](https://docs.edgeimpulse.com/docs/development-platforms/officially-supported-mcu-targets/infineon-cy8ckit-062s2)
+EdgeImpulse offers getting started ML guides for the [PSoC 62S2 Pioneer Kit](https://docs.edgeimpulse.com/docs/development-platforms/officially-supported-mcu-targets/infineon-cy8ckit-062s2) and the [PSoC 6 BLE Pioneer Kit](https://docs.edgeimpulse.com/docs/development-platforms/officially-supported-mcu-targets/infineon-cy8ckit-062-ble), as well as an [Example Keyword Spotting Impulse](https://studio.edgeimpulse.com/public/15582/latest) which can be cloned into your own Edge Impulse account.
 
 ## Using the code example
 

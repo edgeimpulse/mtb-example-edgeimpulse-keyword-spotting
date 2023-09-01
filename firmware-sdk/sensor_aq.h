@@ -22,10 +22,10 @@
 /* Include ----------------------------------------------------------------- */
 #include "QCBOR/inc/qcbor.h"
 #include <stdio.h>
+// NOTE: This inclusion became necessary in Modus Toolbox 3.1, or the line time_t (*time)(time_t*); causes a build error "error: 'time_t' has not been declared"
 #include <time.h>
 // detect POSIX, and use FILE* in that case
 #if !defined(EI_SENSOR_AQ_STREAM) && (defined (__unix__) || (defined (__APPLE__) && defined (__MACH__)))
-
 #define EI_SENSOR_AQ_STREAM     FILE
 #elif !defined(EI_SENSOR_AQ_STREAM)
 // most targets don't need a file handle
