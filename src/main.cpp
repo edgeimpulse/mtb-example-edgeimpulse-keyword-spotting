@@ -28,9 +28,18 @@
 #include "ei_environment_sensor.h"
 #include "ei_microphone.h"
 #include "ei_run_impulse.h"
+#include "ei_bluetooth_psoc63.h"
+#include "ei_eink_screen.h"
+
+
 #include "cyhal_clock.h"
 #include "cyhal_gpio.h"
 #include "cyhal_uart.h"
+
+#ifdef FREERTOS_ENABLED
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
 
 /******
  *
@@ -38,16 +47,24 @@
  *
  ******/
 
+void ei_task(void* param);
 /***************************************
 *            Constants
 ****************************************/
 #define UART_CLEAR_SCREEN   "\x1b[2J\x1b[;H"
+/* Task parameters for Edge Impulse Task. */
+#define EI_TASK_PRIORITY                   (2u)
+#define EI_TASK_STACK_SIZE                 (2048)
 
-/***************************************
-*            Static Variables
-****************************************/
+#define EINK_TASK_PRIORITY                  (2u)
+#define EINK_TASK_STACK_SIZE                (1024u)
+
+
+
+volatile int uxTopUsedPriority; // This enables RTOS aware debugging.
 static ATServer *at;
 EiDevicePSoC62 *eidev;
+
 
 void cy_err(int result)
 {
@@ -64,6 +81,9 @@ void board_init(void)
 {
     cy_rslt_t result;
     cyhal_clock_t system_clock, pll_clock;
+
+    /* This enables RTOS aware debugging in OpenOCD */
+    uxTopUsedPriority = configMAX_PRIORITIES - 1 ;
 
     /* Make sure firmware starts after debugger */
     if (CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) {
@@ -103,9 +123,6 @@ void board_init(void)
 
 int main(void)
 {
-    char uart_data;
-    uint32_t led_state = CYBSP_LED_STATE_OFF;
-
     board_init();
     ei_inertial_sensor_init();
     ei_environment_sensor_init();
@@ -119,6 +136,36 @@ int main(void)
     ei_printf("Type AT+HELP to see a list of commands.\r\n");
     at->print_prompt();
     eidev->set_state(eiStateFinished);
+
+    /* Register the Bluetooth stack and configure BLE task  */
+    if(ei_bluetooth_init() != CY_RSLT_SUCCESS) {
+        CY_ASSERT(0);
+    }
+
+    /* Register EI firmware's main task */
+    if(pdPASS != xTaskCreate(ei_task, "EI Task", EI_TASK_STACK_SIZE,
+                             NULL, EI_TASK_PRIORITY, NULL))
+    {
+        printf("Failed to create the ei task!\r\n");
+        CY_ASSERT(0u);
+    }
+
+    vTaskStartScheduler();
+
+    /* Should never get here */
+    CY_ASSERT(0) ;
+}
+
+void ei_task(void* param)
+{
+    char uart_data;
+    /* Suppress warning for unused parameter */
+    (void)param;
+
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    eink_screen_onetime_set();
 
     while(1)
     {

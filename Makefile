@@ -72,6 +72,13 @@ CONFIG=Debug
 # If set to "true" or "1", display full command-lines when building.
 VERBOSE=
 
+DEFINES =
+ifeq ($(TARGET), CY8CKIT-062-BLE)
+PSOC6_BLE = 1
+DEFINES+= PSOC6_BLE
+ENABLE_SPY_TRACES = 0
+endif
+
 
 ################################################################################
 # Advanced Configuration
@@ -87,7 +94,7 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS=
+COMPONENTS=EMWIN_OSNTS FREERTOS WICED_BLE
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
 DISABLE_COMPONENTS=
@@ -100,10 +107,10 @@ SOURCES=
 
 # Like SOURCES, but for include directories. Value should be paths to
 # directories (without a leading -I).
-INCLUDES=ei-model/
+INCLUDES +=./ei-model
+INCLUDES +=./configs
 
 # Add additional defines to the build process (without a leading -D).
-DEFINES=
 DEFINES += CY_RETARGET_IO_CONVERT_LF_TO_CRLF
 DEFINES += ARM_MATH_LOOPUNROLL
 DEFINES += NDEBUG
@@ -114,6 +121,7 @@ DEFINES += EIDSP_QUANTIZE_FILTERBANK=0
 DEFINES += EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
 DEFINES += EIDSP_LOAD_CMSIS_DSP_SOURCES=1
 DEFINES += EI_SENSOR_AQ_STREAM=FILE
+DEFINES += FREERTOS_ENABLED
 
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=

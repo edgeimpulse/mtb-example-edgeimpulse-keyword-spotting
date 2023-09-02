@@ -42,9 +42,11 @@ private:
     static const int sensors_count = EI_STANDALONE_SENSORS_COUNT;
     ei_device_sensor_t sensors[sensors_count];
     EiState state;
+#ifndef FREERTOS_ENABLED /* bare-metal */
     cyhal_timer_t sample_timer;
     cyhal_timer_cfg_t sample_timer_cfg;
     cyhal_timer_t led_timer;
+#endif
     volatile bool environmental_sampling;
 
 public:

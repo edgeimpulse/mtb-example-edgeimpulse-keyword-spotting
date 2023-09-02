@@ -27,6 +27,12 @@
 #include "cy_syslib.h"
 #include "cyhal_gpio.h"
 
+#ifdef FREERTOS_ENABLED
+#include <FreeRTOS.h>
+#include <timers.h>
+#endif
+
+
 /******
  *
  * @brief EdgeImpulse Device structure and information
@@ -36,13 +42,21 @@
 #define FLASH_DATA_AFTER_ERASE  0x00
 #define FLASH_TEST_SIZE (512u)
 #define FLASH_TEST_ADDR (0x1000)
-/* Periodic timer clock value in Hz  */
+
+#ifdef FREERTOS_ENABLED
+/** Global objects */
+TimerHandle_t fusion_timer;
+TimerHandle_t led_timer;
+void (*sample_cb_ptr)(void);
+/* Private function declarations ------------------------------------------- */
+void vTimerCallback(TimerHandle_t xTimer);
+void vLedCallback(TimerHandle_t xTimer);
+#else /* bare-metal case */
 #define PERIODIC_TIMER_CLOCK_HZ (1000000) /* 1 MHz */
 #define PERIODIC_TIMER_PRIORITY 7
+#endif
 
 typedef void (*timer_callback_t) (void*, cyhal_timer_event_t);
-
-extern void cy_err(int result);
 
 void led_handler(void *callback_arg, cyhal_timer_event_t event)
 {
@@ -145,6 +159,18 @@ EiDevicePSoC62::EiDevicePSoC62(EiDeviceMemory* mem)
     cyhal_gpio_configure(CYBSP_LED_RGB_GREEN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG);
     cyhal_gpio_configure(CYBSP_LED_RGB_BLUE, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG);
 
+#ifdef FREERTOS_ENABLED
+    // create LED timer
+    led_timer = xTimerCreate(
+                            "led timer",
+                            (uint32_t)250 / portTICK_PERIOD_MS,
+                            pdTRUE,
+                            this,
+                            vLedCallback
+                        );
+    xTimerStart(led_timer, 0);
+    // sample timer is created in start_sample_thread()
+#else /* bare-metal */
     // create LED timer
     const cyhal_timer_cfg_t led_timer_cfg =
     {
@@ -172,6 +198,7 @@ EiDevicePSoC62::EiDevicePSoC62(EiDeviceMemory* mem)
     cyhal_timer_configure(&sample_timer, &sample_timer_cfg);
     cyhal_timer_set_frequency(&sample_timer, PERIODIC_TIMER_CLOCK_HZ);
     cyhal_timer_enable_event(&sample_timer, CYHAL_TIMER_IRQ_TERMINAL_COUNT, 7, true);
+#endif
 
     sensors[EI_STANDALONE_SENSOR_MIC].name = "Microphone";
     sensors[EI_STANDALONE_SENSOR_MIC].start_sampling_cb = ei_microphone_sample_start;
@@ -287,30 +314,48 @@ void EiDevicePSoC62::set_default_data_output_baudrate()
 
 bool EiDevicePSoC62::start_sample_thread(void (*sample_read_cb)(void), float sample_interval_ms)
 {
-    bool result;
+    cy_rslt_t result;
+    bool ret = false;
 
+#ifdef FREERTOS_ENABLED
+    sample_cb_ptr = sample_read_cb;
+    fusion_timer = xTimerCreate("Fusion sampler",
+                                (uint32_t)sample_interval_ms / portTICK_PERIOD_MS,
+                                pdTRUE, (void *) 0, vTimerCallback);
+
+    if(xTimerStart(fusion_timer, 0) == pdPASS) {
+#else
     /* Assign the ISR to execute on timer interrupt */
     sample_timer_cfg.period = sample_interval_ms * 1000;
     cyhal_timer_configure(&sample_timer, &sample_timer_cfg);
     cyhal_timer_register_callback(&sample_timer, (timer_callback_t)sample_read_cb, nullptr);
     result = cyhal_timer_start(&sample_timer);
     if (result == CY_RSLT_SUCCESS) {
+#endif
         if(this->is_environmental_sampling()) {
             /* Workaround for ADC issue */
             ei_environment_sensor_async_trigger();
         }
+        ret = true;
         this->set_state(eiStateSampling);
     }
     else {
         ei_printf("ERR: Failed to start sample timer.\n");
     }
 
-    return result;
+    return ret;
 }
 
 bool EiDevicePSoC62::stop_sample_thread(void)
 {
+#ifdef FREERTOS_ENABLED
+    if (xTimerStop(fusion_timer, 0) != pdPASS)
+    {
+        ei_printf("ERR: timer has not been stopped \n");
+    }
+#else
     cyhal_timer_stop(&sample_timer);
+#endif
     this->set_state(eiStateIdle);
 
     return true;
@@ -330,11 +375,19 @@ void EiDevicePSoC62::set_state(EiState state)
         case eiStateSampling:
         case eiStateUploading:
         case eiStateFinished:
+#ifdef FREERTOS_ENABLED
+            xTimerStart(led_timer, 0);
+#else
             cyhal_timer_start(&led_timer);
+#endif
             break;
         case eiStateIdle:
         default:
+#ifdef FREERTOS_ENABLED
+            xTimerStop(led_timer, 0);
+#else
             cyhal_timer_stop(&led_timer);
+#endif
             break;
     }
 }
@@ -358,3 +411,14 @@ bool EiDevicePSoC62::is_environmental_sampling(void)
 {
     return this->environmental_sampling;
 }
+
+#ifdef FREERTOS_ENABLED
+void vTimerCallback(TimerHandle_t xTimer)
+{
+    sample_cb_ptr();
+}
+
+void vLedCallback(TimerHandle_t xTimer) {
+    led_handler(pvTimerGetTimerID(xTimer), (cyhal_timer_event_t)0);
+}
+#endif
